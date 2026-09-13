@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Marker Editor</title>
+	<link rel="stylesheet" href="style.css">
+</head>
+<body>
+	<main id="viewport">
+		<canvas id="canvas"></canvas>
+		<div id="hud">
+			<span id="hud-zoom">100%</span>
+			<span id="hud-cursor">&mdash;</span>
+			<span id="hud-layer">generated</span>
+		</div>
+		<div id="toast" hidden></div>
+		<div id="loading">Loading map data&hellip;</div>
+	</main>
+
+	<aside id="pane">
+		<header>
+			<h1>Marker Editor</h1>
+			<button type="button" id="help-toggle" title="Keyboard shortcuts (?)">?</button>
+		</header>
+
+		<section>
+			<h2>Mode</h2>
+			<div class="segmented" id="mode-switch">
+				<button type="button" data-mode="markers" class="active">Markers</button>
+				<button type="button" data-mode="fill">Fill</button>
+			</div>
+		</section>
+
+		<section>
+			<h2>Base layer</h2>
+			<div class="segmented" id="layer-switch">
+				<button type="button" data-layer="reference">Reference</button>
+				<button type="button" data-layer="generated" class="active">Generated</button>
+			</div>
+			<label class="slider">
+				<span>Blend</span>
+				<input type="range" id="blend" min="0" max="100" value="100">
+			</label>
+			<label class="field" id="generated-map-field">
+				<span>Generated map</span>
+				<select id="generated-map"></select>
+			</label>
+		</section>
+
+		<section>
+			<h2>Reference offset</h2>
+			<div class="field-row">
+				<label class="field">
+					<span>Shift x</span>
+					<input type="number" id="ref-x" step="1" value="0" autocomplete="off">
+				</label>
+				<label class="field">
+					<span>Shift y</span>
+					<input type="number" id="ref-y" step="1" value="0" autocomplete="off">
+				</label>
+			</div>
+			<div class="buttons">
+				<button type="button" id="ref-reset">Reset offset</button>
+			</div>
+			<p class="note subtle-note">Moves the reference image only, to line it up by eye. Marker positions and exported data are unaffected. <kbd>Alt</kbd> + arrows to nudge.</p>
+		</section>
+
+		<section id="fill-section" hidden>
+			<h2>Fill point</h2>
+			<div id="no-fill" class="empty">Click the map to mark a fill point.</div>
+
+			<div id="fill-selection" hidden>
+				<div class="badges">
+					<span class="badge" id="fill-kind">fill</span>
+					<span class="badge badge-edited" id="fill-new" hidden>new</span>
+				</div>
+
+				<label class="field">
+					<span>Color</span>
+					<select id="fill-color"></select>
+				</label>
+
+				<div class="field">
+					<span>Applies to maps</span>
+					<div id="fill-maps" class="checks"></div>
+				</div>
+
+				<div class="field-row">
+					<label class="field">
+						<span>Latitude</span>
+						<input type="number" id="fill-lat" step="0.00001" autocomplete="off">
+					</label>
+					<label class="field">
+						<span>Longitude</span>
+						<input type="number" id="fill-lon" step="0.00001" autocomplete="off">
+					</label>
+				</div>
+
+				<div class="buttons">
+					<button type="button" id="fill-save" class="primary">Save <kbd>S</kbd></button>
+					<button type="button" id="fill-revert">Revert <kbd>R</kbd></button>
+					<button type="button" id="fill-delete" class="danger">Delete <kbd>Del</kbd></button>
+				</div>
+			</div>
+
+			<dl id="fill-stats">
+				<div><dt>Fill points</dt><dd id="stat-fills">0</dd></div>
+			</dl>
+		</section>
+
+		<section id="selection-section">
+			<h2>Selection</h2>
+			<div id="no-selection" class="empty">Click a shield or station label on the map.</div>
+
+			<div id="selection" hidden>
+				<div class="badges">
+					<span class="badge" id="sel-kind">station</span>
+					<span class="badge badge-nws" id="sel-nws" hidden>has NWS lat/lon</span>
+					<span class="badge badge-edited" id="sel-edited" hidden>edited</span>
+				</div>
+
+				<label class="field" id="name-field">
+					<span>Name</span>
+					<input type="text" id="f-name" autocomplete="off" spellcheck="false">
+				</label>
+
+				<div class="field-row">
+					<label class="field">
+						<span>Latitude</span>
+						<input type="number" id="f-lat" step="0.00001" autocomplete="off">
+					</label>
+					<label class="field">
+						<span>Longitude</span>
+						<input type="number" id="f-lon" step="0.00001" autocomplete="off">
+					</label>
+				</div>
+
+				<div class="field-row">
+					<label class="field">
+						<span>Map x</span>
+						<input type="number" id="f-px" step="0.1" autocomplete="off">
+					</label>
+					<label class="field">
+						<span>Map y</span>
+						<input type="number" id="f-py" step="0.1" autocomplete="off">
+					</label>
+				</div>
+
+				<div class="readonly-row">
+					<span>Placement</span>
+					<code id="sel-source">&mdash;</code>
+				</div>
+				<div class="readonly-row">
+					<span>Moved</span>
+					<code id="sel-moved">&mdash;</code>
+				</div>
+
+				<div class="buttons">
+					<button type="button" id="btn-save" class="primary">Save <kbd>S</kbd></button>
+					<button type="button" id="btn-revert">Revert <kbd>R</kbd></button>
+					<button type="button" id="btn-delete" class="danger">Delete <kbd>Del</kbd></button>
+				</div>
+			</div>
+		</section>
+
+		<section>
+			<h2>Show</h2>
+			<label class="check"><input type="checkbox" id="show-icons" checked> Road icons</label>
+			<label class="check"><input type="checkbox" id="show-stations" checked> Station labels</label>
+		</section>
+
+		<section>
+			<h2>Status</h2>
+			<dl id="stats">
+				<div><dt>Road icons</dt><dd id="stat-icons">&mdash;</dd></div>
+				<div><dt>Stations</dt><dd id="stat-stations">&mdash;</dd></div>
+				<div><dt>Edited</dt><dd id="stat-edited">0</dd></div>
+				<div><dt>Deleted</dt><dd id="stat-deleted">0</dd></div>
+				<div><dt>Unsaved</dt><dd id="stat-unsaved">no</dd></div>
+			</dl>
+		</section>
+
+		<footer>
+			<button type="button" id="export-icons">Export road-icons.json</button>
+			<button type="button" id="export-stations">Export stations.json</button>
+			<button type="button" id="export-fills">Export fills.json</button>
+			<button type="button" id="clear-session" class="subtle">Discard all edits</button>
+		</footer>
+	</aside>
+
+	<div id="help" hidden>
+		<div class="help-card">
+			<h2>Shortcuts</h2>
+			<h3>Layers</h3>
+			<dl>
+				<div><dt>B / Tab</dt><dd>Toggle reference &harr; generated</dd></div>
+				<div><dt>Space (hold)</dt><dd>Peek at the other layer</dd></div>
+				<div><dt>[ / ]</dt><dd>Blend the top layer down / up</dd></div>
+				<div><dt>Alt + arrows</dt><dd>Shift reference 1px (Shift: 10px)</dd></div>
+				<div><dt>Alt + 0</dt><dd>Reset reference offset</dd></div>
+			</dl>
+
+			<h3>Navigate</h3>
+			<dl>
+				<div><dt>Shift + wheel</dt><dd>Zoom at cursor</dd></div>
+				<div><dt>+ / -</dt><dd>Zoom in / out</dd></div>
+				<div><dt>Wheel</dt><dd>Scroll vertically</dd></div>
+				<div><dt>Drag</dt><dd>Pan</dd></div>
+				<div><dt>F / 0</dt><dd>Fit to window</dd></div>
+				<div><dt>1 / 2</dt><dd>Zoom 100% / 200%</dd></div>
+			</dl>
+
+			<h3>Edit</h3>
+			<dl>
+				<div><dt>Click marker</dt><dd>Select (saves previous edit)</dd></div>
+				<div><dt>Click map</dt><dd>Move selected marker there</dd></div>
+				<div><dt>Arrows</dt><dd>Nudge 1px (Shift: 10px)</dd></div>
+				<div><dt>S / Ctrl+S</dt><dd>Save</dd></div>
+				<div><dt>R</dt><dd>Revert selected</dd></div>
+				<div><dt>Delete / X</dt><dd>Delete selected</dd></div>
+				<div><dt>Ctrl+Z</dt><dd>Undo</dd></div>
+				<div><dt>Esc</dt><dd>Deselect</dd></div>
+			</dl>
+
+			<h3>Fill mode</h3>
+			<dl>
+				<div><dt>M</dt><dd>Switch Markers &harr; Fill mode</dd></div>
+				<div><dt>Click map</dt><dd>Add a fill point (nothing selected)</dd></div>
+				<div><dt>Click crosshair</dt><dd>Select a fill point</dd></div>
+			</dl>
+
+			<h3>Show</h3>
+			<dl>
+				<div><dt>I</dt><dd>Road icons</dd></div>
+				<div><dt>T</dt><dd>Station labels</dd></div>
+				<div><dt>H</dt><dd>Hide all overlays</dd></div>
+			</dl>
+			<button type="button" id="help-close">Close</button>
+		</div>
+	</div>
+
+	<script type="module" src="app.mjs"></script>
+</body>
+</html>

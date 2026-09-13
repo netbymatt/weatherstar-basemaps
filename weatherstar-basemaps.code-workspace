@@ -1,0 +1,20 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.eol": "\n",
+		"search.exclude": {
+			"**/data": true
+		},
+		"files.exclude": {
+			"**/node_modules": true
+		},
+		"cSpell.words": [
+			"bbox",
+			"KLOT"
+		]
+	}
+}

@@ -1,0 +1,51 @@
+{
+	// Use IntelliSense to learn about possible attributes.
+	// Hover to view descriptions of existing attributes.
+	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Editor Server",
+			"request": "launch",
+			"runtimeArgs": [
+				"run-script",
+				"editor"
+			],
+			"runtimeExecutable": "npm",
+			"skipFiles": [
+				"<node_internals>/**"
+			],
+			"type": "node",
+			"env": {"PORT":"8081"}
+		},
+		{
+			"name": "Get Road Data",
+			"program": "${workspaceFolder}/getdata/index.mjs",
+			"request": "launch",
+			"skipFiles": [
+				"<node_internals>/**"
+			],
+			"type": "node"
+		},
+		{
+			"name": "Shapefile",
+			"program": "${workspaceFolder}/src/stateshape/index.js",
+			"request": "launch",
+			"skipFiles": [
+				"<node_internals>/**",
+				"node_modules"
+			],
+			"type": "node"
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "Render Map",
+			"skipFiles": [
+				"<node_internals>/**",
+				"node_modules"
+			],
+			"program": "${workspaceFolder}/src/index.mjs"
+		}
+	]
+}

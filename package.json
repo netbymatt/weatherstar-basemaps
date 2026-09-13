@@ -1,0 +1,50 @@
+{
+  "name": "basic-map",
+  "version": "0.1.0",
+  "description": "Plot a basic map from open streetmap data",
+  "main": "src/index.mjs",
+  "type": "module",
+  "scripts": {
+    "lint": "npx eslint src/",
+    "lint:fix": "npx eslint --fix src/",
+    "editor": "node editor/server.mjs",
+    "editor:verify": "node editor/verify.mjs",
+    "editor:verify-ui": "node editor/verify-ui.mjs"
+  },
+  "keywords": [
+    "open",
+    "streetmap",
+    "plot"
+  ],
+  "author": "Matt Walsh",
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-config-airbnb-extended": "^3.1.1",
+		"@eslint/config-helpers": "^0.7.0"
+  },
+  "dependencies": {
+    "canvas": "^3.2.3",
+    "p-limit": "^7.3.2",
+    "proj4": "^2.7.2",
+    "shapefile": "^0.6.6",
+    "sharp": "^0.35.4",
+    "through": "^2.3.8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/netbymatt/basic-map.git"
+  },
+  "bugs": {
+    "url": "https://github.com/netbymatt/basic-map/issues"
+  },
+  "homepage": "https://github.com/netbymatt/basic-map#readme",
+  "allowScripts": {
+    "canvas@3.2.3": true,
+    "unrs-resolver@1.12.2": true
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
