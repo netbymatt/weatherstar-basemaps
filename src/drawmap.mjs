@@ -146,7 +146,11 @@ const drawSections = async (ctx, region, map, scale, tag, writeStage) => {
 	}
 };
 
-const drawMap = async (region, map) => {
+const drawMap = async (baseRegion, map) => {
+	// presence of map output size overrides region output size. build a new
+	// region rather than editing the shared one, maps for the same region are
+	// drawn in parallel and each needs its own size
+	const region = map.outputSize ? { ...baseRegion, outputSize: map.outputSize } : baseRegion;
 	const { outputSize } = region;
 	const { COLORS } = map;
 	const tag = `${map.NAME}-${region.NAME}`;

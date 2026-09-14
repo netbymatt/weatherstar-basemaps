@@ -17,6 +17,11 @@ const fills = await readFile(FILLS_FILE)
 // points can override it with a "tolerance" of their own
 const DEFAULT_TOLERANCE = 32;
 
+// colors the map draws outlines with. a seed that lands on one of these would
+// flood along every connected line and erase it, which happens when a map is
+// drawn small enough that an island or inlet is nothing but its outline
+const LINE_COLORS = ['state', 'county', 'land', 'road', 'minorRoad'];
+
 // parse any CSS color string to [r, g, b, a] by drawing it to a 1x1 canvas
 const parseColor = (() => {
 	const ctx = createCanvas(1, 1).getContext('2d');
@@ -116,6 +121,10 @@ const addFills = (ctx, region, map) => {
 	const image = ctx.getImageData(0, 0, width, height);
 	let changed = false;
 
+	const lineColors = LINE_COLORS
+		.filter((key) => map.COLORS[key])
+		.map((key) => parseColor(map.COLORS[key]));
+
 	applicable.forEach((fill) => {
 		const color = map.COLORS[fill.color];
 		if (!color) {
@@ -131,6 +140,14 @@ const addFills = (ctx, region, map) => {
 			return;
 		}
 
+		const tolerance = fill.tolerance ?? DEFAULT_TOLERANCE;
+		const seed = (y * width + x) * 4;
+		const onLine = lineColors.some((line) => line.reduce((sum, v, k) => sum + (image.data[seed + k] - v) ** 2, 0) <= tolerance * tolerance);
+		if (onLine) {
+			console.log(`Fill at ${fill.lat}, ${fill.lon} lands on a line in ${map.NAME}-${region.NAME}, skipping`);
+			return;
+		}
+
 		const painted = floodFill(
 			image,
 			width,
@@ -138,7 +155,7 @@ const addFills = (ctx, region, map) => {
 			x,
 			y,
 			parseColor(color),
-			fill.tolerance ?? DEFAULT_TOLERANCE,
+			tolerance,
 		);
 		if (painted > 0) changed = true;
 	});
