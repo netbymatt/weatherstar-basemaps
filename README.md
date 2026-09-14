@@ -31,7 +31,7 @@ map in [`src/MAPS.mjs`](src/MAPS.mjs), producing:
 | --- | --- |
 | `output/{map}-{region}.png` | the finished map |
 | `output/{map}-{region}.webp` | the same, lossless webp |
-| `output/tiles/{map}-{region}/{xx}-{yy}.png` | 510×320 tiles, `00-00` at the northwest corner |
+| `output/tiles/{map}-{region}/{xx}-{yy}.webp` | 510×320 lossless webp tiles, `00-00` at the northwest corner |
 | `output/raw/{map}-{region}-{n}.png` | one snapshot per section, for debugging |
 
 The source data is committed, so a fresh clone renders without fetching

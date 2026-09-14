@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import sharp from 'sharp';
 
 // slice an image into tileWidth x tileHeight tiles, written as
-// ./{outputDir}/{xx}-{yy}.png where xx is the column (west to east)
+// lossless, maximum-effort ./{outputDir}/{xx}-{yy}.webp where xx is the column (west to east)
 // and yy is the row (north to south), both zero-padded to 2 digits
 const sliceToTiles = async (source, outputDir, tileWidth, tileHeight) => {
 	await fs.mkdir(outputDir, { recursive: true });
@@ -23,14 +23,14 @@ const sliceToTiles = async (source, outputDir, tileWidth, tileHeight) => {
 
 			const xx = String(x).padStart(2, '0');
 			const yy = String(y).padStart(2, '0');
-			const fileName = `${outputDir}/${xx}-${yy}.png`;
+			const fileName = `${outputDir}/${xx}-${yy}.webp`;
 
 			jobs.push(
 				sharp(source)
 					.extract({
 						left, top, width: extractWidth, height: extractHeight,
 					})
-					.png()
+					.webp({ lossless: true, effort: 6 })
 					.toFile(fileName),
 			);
 		}
