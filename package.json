@@ -1,6 +1,6 @@
 {
-  "name": "basic-map",
-  "version": "0.1.0",
+  "name": "weatherstar-basemaps",
+  "version": "1.1.0",
   "description": "Plot a basic map from open streetmap data",
   "main": "src/index.mjs",
   "type": "module",

@@ -31,7 +31,8 @@ map in [`src/MAPS.mjs`](src/MAPS.mjs), producing:
 | --- | --- |
 | `output/{map}-{region}.png` | the finished map |
 | `output/{map}-{region}.webp` | the same, lossless webp |
-| `output/tiles/{map}-{region}/{xx}-{yy}.webp` | 510×320 lossless webp tiles, `00-00` at the northwest corner |
+| `output/tiles/{map}-{region}/base/{xx}-{yy}.webp` | 510×320 lossless webp tiles, `00-00` at the northwest corner |
+| `output/tiles/{map}-{region}/overlay/{xx}-{yy}.webp` | the same tiles with only `OVERLAY_COLORS` kept (their one-stop palette blends become that color, one stop more transparent), everything else transparent |
 | `output/raw/{map}-{region}-{n}.png` | one snapshot per section, for debugging |
 
 The source data is committed, so a fresh clone renders without fetching
@@ -73,7 +74,7 @@ order onto the canvas; `POST` runs afterwards on the finished image:
 | --- | --- |
 | `palettize` | reduces to a fixed palette built from `COLORS`, writes the png/webp |
 | `pixelate` | re-renders at `PIXELATE_SCALE` and blows it back up, writing a `-pixelated` pair |
-| `tiles` | slices the webp into 510×320 tiles |
+| `tiles` | slices the webp into 510×320 base tiles, plus overlay tiles when the map has `OVERLAY_COLORS` (an array of key names from `COLORS`) |
 
 Anything left out of `SECTIONS` or `POST` simply doesn't run, so a map only
 pays for what it draws.

@@ -29,6 +29,13 @@ const unpremultiply = ([r, g, b, a]) => {
 	return [r * scale, g * scale, b * scale, a].map((v) => Math.min(255, Math.max(0, Math.round(v))));
 };
 
+// the color t of the way from `from` to `to` (both [r, g, b, a]), as the palette stores it
+const blend = (from, to, t) => {
+	const a = premultiply(from);
+	const b = premultiply(to);
+	return unpremultiply(a.map((v, k) => v + (b[k] - v) * t));
+};
+
 // provided colors first (in object order), then `stops` blends between every pair
 const buildPalette = (colorValues, stops) => {
 	const entries = [];
@@ -45,11 +52,8 @@ const buildPalette = (colorValues, stops) => {
 
 	for (let i = 0; i < base.length; i += 1) {
 		for (let j = i + 1; j < base.length; j += 1) {
-			const from = premultiply(base[i]);
-			const to = premultiply(base[j]);
 			for (let s = 1; s <= stops; s += 1) {
-				const t = s / (stops + 1);
-				add(unpremultiply(from.map((v, k) => v + (to[k] - v) * t)));
+				add(blend(base[i], base[j], s / (stops + 1)));
 			}
 		}
 	}
@@ -131,3 +135,4 @@ const palettize = (sourceCtx, colors, { stops = 4 } = {}) => {
 };
 
 export default palettize;
+export { parseColor, blend };

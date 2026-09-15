@@ -4,7 +4,7 @@ const MAPS = [
 		COLORS: {
 			state: '#000000',
 			extraFill: '#7c848a',
-			county: '#000000',
+			county: '#31353a',
 			countyFill: '#7c848a',
 			minorRoad: '#339977',
 			road: '#a5aeaf',
@@ -16,6 +16,15 @@ const MAPS = [
 		// the pixelated render is drawn at this fraction of the output size,
 		// then blown back up
 		PIXELATE_SCALE: 0.75,
+		// the tiles step also writes overlay tiles holding only pixels of
+		// exactly these colors, everything else transparent. names are keys
+		// into COLORS
+		OVERLAY_COLORS: [
+			'state',
+			'county',
+			'roadIconRed',
+			'roadIconBlue',
+		],
 		SECTIONS: [
 			'land',
 			'county',

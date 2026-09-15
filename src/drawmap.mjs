@@ -37,6 +37,10 @@ const [states, counties, roads, land, lakes] = await Promise.all([
 // override it with a PIXELATE_SCALE of their own
 const DEFAULT_PIXELATE_SCALE = 0.75;
 
+// blends palettize puts between each pair of colors. the overlay tiles need the
+// same number to recognize those blends
+const PALETTE_STOPS = 2;
+
 /**
  * Draw every section the map asks for onto ctx.
  *
@@ -182,7 +186,7 @@ const drawMap = async (baseRegion, map) => {
 		switch (step) {
 			case 'palettize': {
 				console.time(`palettize-${tag}`);
-				const palettized = palettize(ctx, COLORS, { stops: 2 });
+				const palettized = palettize(ctx, COLORS, { stops: PALETTE_STOPS });
 
 				await writePngToFile(`./output/${tag}.png`, palettized, palettized.palette);
 				tileSource = `./output/${tag}.webp`;
@@ -217,22 +221,35 @@ const drawMap = async (baseRegion, map) => {
 				pixelatedCtx.drawImage(smallCanvas, 0, 0, outputSize.width, outputSize.height);
 				console.timeEnd(`pixelate-${tag}`);
 
-				const output = palettizing ? palettize(pixelatedCtx, COLORS, { stops: 2 }) : pixelatedCanvas;
+				const output = palettizing ? palettize(pixelatedCtx, COLORS, { stops: PALETTE_STOPS }) : pixelatedCanvas;
 
 				await writePngToFile(`./output/${tag}-pixelated.png`, output, output.palette);
 				await writeWebpToFile(`./output/${tag}-pixelated.webp`, output, output.palette);
 				break;
 			}
 
-			case 'tiles':
+			case 'tiles': {
 				if (!tileSource) {
 					console.error(`Cannot slice tiles for ${tag}: a step that writes a webp has to run first`);
 					break;
 				}
+
+				// overlay colors are named by their key in COLORS
+				const overlayColors = (map.OVERLAY_COLORS ?? []).filter((key) => {
+					if (COLORS[key]) return true;
+					console.error(`Map ${map.NAME} has no color named "${key}" for its overlay`);
+					return false;
+				}).map((key) => COLORS[key]);
+
 				console.time(`tiles-${tag}`);
-				await sliceToTiles(tileSource, `./output/tiles/${tag}`, 510, 320);
+				await sliceToTiles(tileSource, `./output/tiles/${tag}`, 510, 320, {
+					overlayColors,
+					paletteColors: Object.values(COLORS),
+					stops: PALETTE_STOPS,
+				});
 				console.timeEnd(`tiles-${tag}`);
 				break;
+			}
 
 			default:
 				console.error(`No post method for: ${step}`);
