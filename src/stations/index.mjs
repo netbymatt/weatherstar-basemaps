@@ -38,6 +38,8 @@ const FONT_SIZE = 18;
 const STROKE_WIDTH = 4;
 // the text sits this far above the station's true position
 const TEXT_RISE = 12;
+// the drop shadow sits this far right of and below the label
+const SHADOW_OFFSET = 1;
 
 // no bold: the family has one weight, and asking for bold makes the renderer
 // synthesize it, which smears a pixel font
@@ -45,7 +47,7 @@ const fontAt = (size) => `${size}px "Star4000"`;
 
 // draw a label's text centered on x with its middle at y. scale 1 is the full
 // size label; 0.5 rasterizes the glyphs at half size for the pixelated variant
-const drawLabelText = (ctx, name, x, y, scale = 1) => {
+const drawLabelText = (ctx, name, x, y, colors, scale = 1) => {
 	// some names are duplicates an end in -2
 	// this allows the non-dupe keys in json without plotting the extra 2 on the map
 	const shortName = name.substring(0, 3);
@@ -53,9 +55,19 @@ const drawLabelText = (ctx, name, x, y, scale = 1) => {
 	ctx.textAlign = 'center';
 	ctx.textBaseline = 'middle';
 	ctx.lineJoin = 'round';
-
-	// black outline first, so the white fill sits on top
 	ctx.lineWidth = STROKE_WIDTH * scale;
+
+	// drop shadow first, the whole label offset down and right, so the label
+	// proper covers all of it but the offset edge
+	if (colors.stationShadow) {
+		const offset = SHADOW_OFFSET * scale;
+		ctx.strokeStyle = colors.stationShadow;
+		ctx.fillStyle = colors.stationShadow;
+		ctx.strokeText(shortName, x + offset, y + offset);
+		ctx.fillText(shortName, x + offset, y + offset);
+	}
+
+	// black outline next, so the white fill sits on top
 	ctx.strokeStyle = '#000';
 	ctx.strokeText(shortName, x, y);
 
@@ -73,15 +85,16 @@ const drawMarkerRect = (ctx, x, y, scale = 1) => {
 };
 
 /**
+ * @param {Object<string, string>} colors the map's COLORS
  * @param {number} [scale=1] size the label is drawn at. The pixelated map is
  *   rendered small and blown up, so its labels are drawn proportionally
  *   smaller to end up the same size as the full resolution ones.
  */
-const addStations = (ctx, region, scale = 1) => {
+const addStations = (ctx, region, colors, scale = 1) => {
 	// process all the stations
 	positionsFor(region).forEach(({ name, x, y }) => {
 		// deliberate shift upwards to account for center-of-text rendering
-		drawLabelText(ctx, name, x, y - TEXT_RISE * scale, scale);
+		drawLabelText(ctx, name, x, y - TEXT_RISE * scale, colors, scale);
 		drawMarkerRect(ctx, x, y, scale);
 	});
 };

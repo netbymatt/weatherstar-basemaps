@@ -139,7 +139,7 @@ const drawSections = async (ctx, region, map, scale, tag, writeStage) => {
 
 			case 'stations':
 				console.time(`stations-${tag}`);
-				addStations(ctx, region, scale);
+				addStations(ctx, region, COLORS, scale);
 				console.timeEnd(`stations-${tag}`);
 				await writeStage();
 				break;

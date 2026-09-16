@@ -10,6 +10,7 @@ const MAPS = [
 			road: '#a5aeaf',
 			water: '#4b69aa',
 			background: '#ffffff',
+			stationShadow: '#31353a',
 			roadIconRed: '#c10415',
 			roadIconBlue: '#0d1259',
 		},
