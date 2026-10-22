@@ -29,7 +29,7 @@
     "p-limit": "^7.3.2",
     "proj4": "^2.7.2",
     "shapefile": "^0.6.6",
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "through": "^2.3.8"
   },
   "repository": {
