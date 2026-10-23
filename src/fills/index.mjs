@@ -106,12 +106,18 @@ const floodFill = (image, width, height, seedX, seedY, fill, tolerance) => {
 	return painted;
 };
 
-// a point with no maps listed applies everywhere, which keeps hand written
+// points marked before alaska and hawaii existed carry no region, and were
+// all placed on the lower 48
+const DEFAULT_REGION = 'conus';
+
+// a point only ever belongs to the one region it was placed on. one with no
+// maps listed applies to every map of that region, which keeps hand written
 // entries simple
-const appliesTo = (fill, map) => !fill.maps || fill.maps.includes(map.NAME);
+const appliesTo = (fill, region, map) => (fill.region ?? DEFAULT_REGION) === region.NAME
+	&& (!fill.maps || fill.maps.includes(map.NAME));
 
 const addFills = (ctx, region, map) => {
-	const applicable = fills.filter((fill) => appliesTo(fill, map));
+	const applicable = fills.filter((fill) => appliesTo(fill, region, map));
 	if (applicable.length === 0) return;
 
 	const toPixels = createProjection(region);

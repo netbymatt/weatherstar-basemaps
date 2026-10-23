@@ -20,12 +20,26 @@ running it through the region's projection:
 | --- | --- |
 | `stations.json` | `{ "ABE": { "lat": ..., "lon": ... } }` |
 | `road-icons.json` | `[ { "lat": ..., "lon": ... } ]` |
-| `fills.json` | `[ { "lat": ..., "lon": ..., "color": ..., "maps": [...] } ]` |
+| `fills.json` | `[ { "lat": ..., "lon": ..., "color": ..., "region": ..., "maps": [...] } ]` |
 
 Markers used to carry `x`/`y` pixel coordinates from the legacy basemap, with an
 approximate polynomial fit converting them for entries that had no coordinates
 of their own. That is all gone — the `x`/`y` columns were dropped once every
 entry had real coordinates.
+
+## Regions
+
+The **Region** picker switches between the areas in `src/REGIONS.mjs`. Each
+region lists the maps it is drawn as in its `MAPS`; alaska and hawaii only
+produce a forecast map, so the Generated map picker and the fill map
+checkboxes only offer `forecast` there.
+
+The editor works in the pixel space of the region's first map, at the size
+the pipeline draws it: the region's `outputSize`, unless the region gives that
+map its own size in `mapOutputSize` (conus draws its forecast map smaller than
+its radar map). Stations and road icons only exist on the radar map, so on a region
+without one, markers mode is disabled and only fill points can be placed. The
+reference image is the legacy lower 48 basemap and is only shown for conus.
 
 ## Working with it
 
@@ -62,13 +76,19 @@ water. Fill mode marks points where one of those areas should be filled in.
 
 Press <kbd>M</kbd> or use the Mode switch. Clicking empty map adds a point;
 clicking a crosshair selects it. Each point records a lat/lon, a color named
-from the maps' `COLORS`, and which maps it applies to:
+from the maps' `COLORS`, the region it was placed on, and which of that
+region's maps it applies to:
 
 ```json
 [
-	{"lat": 30.1, "lon": -115.4, "color": "extraFill", "maps": ["radar", "forecast"]}
+	{"lat": 30.1, "lon": -115.4, "color": "extraFill", "region": "conus", "maps": ["radar", "forecast"]}
 ]
 ```
+
+A point belongs to exactly one region, the one selected when it was placed,
+and only that region's points are shown or rendered. A point with no
+`region` is treated as `conus`, which is where every point placed before
+alaska and hawaii were added lives.
 
 `color` is a key from the map's `COLORS`, so the same point can resolve to a
 different shade on each map it applies to. A point listing no `maps` applies to

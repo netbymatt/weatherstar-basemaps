@@ -1,7 +1,6 @@
 // Marker editor: viewport rendering and interaction.
 
 import {
-	region,
 	createModel,
 	recomputePositions,
 	isEdited,
@@ -17,14 +16,20 @@ import {
 	serializeStations,
 	serializeIcons,
 	serializeFills,
-	projection,
 	addFill,
+	setRegion,
+	inRegion,
+	mapsFor,
+	regionHasMarkers,
 	COLOR_NAMES,
-	MAP_NAMES,
+	REGION_NAMES,
 } from './data.mjs';
 
-const MAP_WIDTH = region.outputSize.width;
-const MAP_HEIGHT = region.outputSize.height;
+// the legacy basemap only ever covered the lower 48, other regions have
+// nothing to compare against
+const REFERENCE_IMAGES = {
+	conus: '/reference-images/radar.webp',
+};
 
 // how close (in screen pixels) the cursor must be to count as hitting a marker
 const HIT_RADIUS = 14;
@@ -46,10 +51,11 @@ const REF_OFFSET_KEY = 'basic-map-editor-reference-offset-v1';
 
 const ui = {
 	mode: 'markers',
+	region: REGION_NAMES[0],
 	// which rendered map is shown as the generated layer
-	generatedMap: MAP_NAMES[0],
+	generatedMap: mapsFor(REGION_NAMES[0])[0],
 	fillColor: 'stateFill',
-	fillMaps: [...MAP_NAMES],
+	fillMaps: [...mapsFor(REGION_NAMES[0])],
 	layer: 'generated',
 	blend: 1,
 	showIcons: true,
@@ -90,6 +96,9 @@ const footprintOf = (item) => {
 
 /* ---------- view ---------- */
 
+// the pixel size of the map being edited, which changes with the region
+const mapSize = () => model.region.outputSize;
+
 const resize = () => {
 	const dpr = window.devicePixelRatio || 1;
 	const { clientWidth, clientHeight } = canvas;
@@ -99,10 +108,11 @@ const resize = () => {
 };
 
 const fitToWindow = () => {
-	const scale = Math.min(canvas.clientWidth / MAP_WIDTH, canvas.clientHeight / MAP_HEIGHT);
+	const { width, height } = mapSize();
+	const scale = Math.min(canvas.clientWidth / width, canvas.clientHeight / height);
 	view.scale = scale;
-	view.tx = (canvas.clientWidth - MAP_WIDTH * scale) / 2;
-	view.ty = (canvas.clientHeight - MAP_HEIGHT * scale) / 2;
+	view.tx = (canvas.clientWidth - width * scale) / 2;
+	view.ty = (canvas.clientHeight - height * scale) / 2;
 	render();
 };
 
@@ -135,6 +145,7 @@ const drawBaseLayers = () => {
 	// keep pixels crisp once zoomed past 1:1, smooth when shrunk
 	ctx.imageSmoothingEnabled = view.scale < 1;
 
+	const { width, height } = mapSize();
 	const bottomExists = Boolean(order[0][1]);
 	order.forEach(([name, image], index) => {
 		if (!image) return;
@@ -142,7 +153,7 @@ const drawBaseLayers = () => {
 		const dx = name === 'reference' ? ui.refOffset.x : 0;
 		const dy = name === 'reference' ? ui.refOffset.y : 0;
 		ctx.globalAlpha = index === 1 && bottomExists ? ui.blend : 1;
-		ctx.drawImage(image, dx, dy, MAP_WIDTH, MAP_HEIGHT);
+		ctx.drawImage(image, dx, dy, width, height);
 	});
 	ctx.globalAlpha = 1;
 
@@ -266,21 +277,22 @@ const render = () => {
 	ctx.fillStyle = '#0e1114';
 	ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
 
+	if (!model) return;
 	drawBaseLayers();
 
-	if (!model) return;
 	if (!ui.hideOverlays) {
 		// in fill mode the markers dim back so the crosshairs stand out
 		ctx.globalAlpha = ui.mode === 'fill' ? 0.28 : 1;
 		model.items.forEach((item) => {
 			if (item.kind === 'fill') return;
+			if (!inRegion(model, item)) return;
 			if (item.kind === 'icon' && !ui.showIcons && !isEdited(item)) return;
 			if (item.kind === 'station' && !ui.showStations && !isEdited(item)) return;
 			drawMarker(item);
 		});
 		ctx.globalAlpha = ui.mode === 'fill' ? 1 : 0.35;
 		model.items.forEach((item) => {
-			if (item.kind === 'fill') drawFill(item);
+			if (item.kind === 'fill' && inRegion(model, item)) drawFill(item);
 		});
 		ctx.globalAlpha = 1;
 	}
@@ -298,6 +310,7 @@ const itemAt = (screenX, screenY) => {
 
 	model.items.forEach((item) => {
 		if (item.deleted) return;
+		if (!inRegion(model, item)) return;
 		// each mode only picks up its own kind of marker
 		if (ui.mode === 'fill' ? item.kind !== 'fill' : item.kind === 'fill') return;
 		if (item.kind === 'icon' && !ui.showIcons) return;
@@ -358,7 +371,8 @@ const updateFillPane = () => {
 	const panel = $('fill-selection');
 	const empty = $('no-fill');
 
-	$('stat-fills').textContent = String(model.items.filter((item) => item.kind === 'fill' && !item.deleted).length);
+	$('stat-fills').textContent = String(model.items
+		.filter((item) => item.kind === 'fill' && !item.deleted && inRegion(model, item)).length);
 
 	if (!selected || selected.kind !== 'fill') {
 		panel.hidden = true;
@@ -370,6 +384,7 @@ const updateFillPane = () => {
 	empty.hidden = true;
 
 	$('fill-new').hidden = !selected.isNew;
+	$('fill-region').textContent = selected.region;
 	$('fill-color').value = selected.color;
 	$('fill-lat').value = selected.lat.toFixed(5);
 	$('fill-lon').value = selected.lon.toFixed(5);
@@ -539,7 +554,7 @@ const toggleLayer = () => {
 };
 
 // the rendered map layer is named for the map and region it came from
-const generatedMapUrl = () => `/output/${ui.generatedMap}-${region.NAME}.webp`;
+const generatedMapUrl = () => `/output/${ui.generatedMap}-${ui.region}.webp`;
 
 const loadGeneratedMap = async () => {
 	const image = await new Promise((resolve) => {
@@ -759,6 +774,13 @@ window.addEventListener('blur', () => {
 
 /* ---------- pane wiring ---------- */
 
+const loadImage = (src) => new Promise((resolve) => {
+	const image = new Image();
+	image.onload = () => resolve(image);
+	image.onerror = () => resolve(null);
+	image.src = src;
+});
+
 const commitField = (handler) => (event) => {
 	if (!selected) return;
 	const value = Number(event.target.value);
@@ -856,6 +878,10 @@ bindCheckbox('show-icons', 'showIcons');
 bindCheckbox('show-stations', 'showStations');
 
 const setMode = (mode) => {
+	if (mode === 'markers' && !regionHasMarkers(ui.region)) {
+		toast(`${ui.region} has no stations or road icons`);
+		return;
+	}
 	ui.mode = mode;
 	document.querySelectorAll('#mode-switch button').forEach((button) => {
 		button.classList.toggle('active', button.dataset.mode === mode);
@@ -867,19 +893,30 @@ const setMode = (mode) => {
 	refresh();
 };
 
+// regions without the radar map have no stations or road icons to place
+const updateModeAvailability = () => {
+	const hasMarkers = regionHasMarkers(ui.region);
+	document.querySelector('#mode-switch [data-mode="markers"]').disabled = !hasMarkers;
+	if (!hasMarkers && ui.mode !== 'fill') setMode('fill');
+};
+
 document.querySelectorAll('#mode-switch button').forEach((button) => {
 	button.addEventListener('click', () => setMode(button.dataset.mode));
 });
 
 // generated map picker, so the fill work can be judged against the map that
-// actually needs the fills
-MAP_NAMES.forEach((name) => {
-	const option = document.createElement('option');
-	option.value = name;
-	option.textContent = name;
-	$('generated-map').append(option);
-});
-$('generated-map').value = ui.generatedMap;
+// actually needs the fills. only the maps the region is drawn as are offered
+const populateGeneratedMaps = () => {
+	const maps = mapsFor(ui.region);
+	if (!maps.includes(ui.generatedMap)) [ui.generatedMap] = maps;
+	$('generated-map').replaceChildren(...maps.map((name) => {
+		const option = document.createElement('option');
+		option.value = name;
+		option.textContent = name;
+		return option;
+	}));
+	$('generated-map').value = ui.generatedMap;
+};
 
 $('generated-map').addEventListener('change', (event) => {
 	ui.generatedMap = event.target.value;
@@ -903,26 +940,65 @@ $('fill-color').addEventListener('change', (event) => {
 	}
 });
 
-// one checkbox per map, so a point can be limited to the maps that need it
-MAP_NAMES.forEach((name) => {
-	const label = document.createElement('label');
-	const input = document.createElement('input');
-	input.type = 'checkbox';
-	input.value = name;
-	input.checked = true;
-	input.addEventListener('change', () => {
-		const maps = [...document.querySelectorAll('#fill-maps input')]
-			.filter((box) => box.checked)
-			.map((box) => box.value);
-		ui.fillMaps = maps;
-		if (selected?.kind === 'fill') {
-			mutate(model, selected, { maps });
-			refresh();
-		}
-	});
-	label.append(input, document.createTextNode(name));
-	$('fill-maps').append(label);
+// one checkbox per map of the region, so a point can be limited to the maps
+// that need it
+const populateFillMaps = () => {
+	ui.fillMaps = [...mapsFor(ui.region)];
+	$('fill-maps').replaceChildren(...ui.fillMaps.map((name) => {
+		const label = document.createElement('label');
+		const input = document.createElement('input');
+		input.type = 'checkbox';
+		input.value = name;
+		input.checked = true;
+		input.addEventListener('change', () => {
+			const maps = [...document.querySelectorAll('#fill-maps input')]
+				.filter((box) => box.checked)
+				.map((box) => box.value);
+			ui.fillMaps = maps;
+			if (selected?.kind === 'fill') {
+				mutate(model, selected, { maps });
+				refresh();
+			}
+		});
+		label.append(input, document.createTextNode(name));
+		return label;
+	}));
+};
+
+const loadReferenceMap = async () => {
+	const url = REFERENCE_IMAGES[ui.region];
+	layers.reference = url ? await loadImage(url) : null;
+	render();
+};
+
+// everything is reprojected into the new region's pixel space, and only
+// that region's markers and fill points are shown or selectable
+const setRegionView = async (name) => {
+	save(true);
+	selected = null;
+	hovered = null;
+	ui.region = name;
+	$('region').value = name;
+	setRegion(model, name);
+	populateGeneratedMaps();
+	populateFillMaps();
+	updateModeAvailability();
+	fitToWindow();
+	refresh();
+	await Promise.all([loadGeneratedMap(), loadReferenceMap()]);
+};
+
+REGION_NAMES.forEach((name) => {
+	const option = document.createElement('option');
+	option.value = name;
+	option.textContent = name;
+	$('region').append(option);
 });
+$('region').value = ui.region;
+$('region').addEventListener('change', (event) => setRegionView(event.target.value));
+
+populateGeneratedMaps();
+populateFillMaps();
 
 const commitFillLatLon = () => {
 	if (selected?.kind !== 'fill') return;
@@ -1011,13 +1087,6 @@ window.addEventListener('resize', resize);
 
 /* ---------- startup ---------- */
 
-const loadImage = (src) => new Promise((resolve) => {
-	const image = new Image();
-	image.onload = () => resolve(image);
-	image.onerror = () => resolve(null);
-	image.src = src;
-});
-
 const start = async () => {
 	try {
 		model = await createModel();
@@ -1029,7 +1098,7 @@ const start = async () => {
 	}
 
 	const [reference, generated, icon] = await Promise.all([
-		loadImage('/reference-images/radar.webp'),
+		loadImage(REFERENCE_IMAGES[ui.region]),
 		loadImage(generatedMapUrl()),
 		loadImage('/reference-images/road-icon.png'),
 	]);
@@ -1070,7 +1139,10 @@ const start = async () => {
 		serializeIcons: () => serializeIcons(model),
 		serializeFills: () => serializeFills(model),
 		setMode,
-		projection,
+		setRegion: setRegionView,
+		get projection() {
+			return model.projection;
+		},
 	};
 	window.dispatchEvent(new Event('editor-ready'));
 };

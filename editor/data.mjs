@@ -3,6 +3,7 @@
 import createProjection from './projection.mjs';
 import REGIONS from '../src/REGIONS.mjs';
 import MAPS from '../src/MAPS.mjs';
+import regionForMap from '../src/regionForMap.mjs';
 
 const STORAGE_KEY = 'basic-map-editor-edits-v1';
 
@@ -18,8 +19,44 @@ const LATLON_DECIMALS = 5;
 
 const round = (value) => Number(value.toFixed(LATLON_DECIMALS));
 
-export const region = REGIONS[0];
-export const projection = createProjection(region);
+// fill points from before alaska and hawaii existed carry no region; they
+// were all placed on the lower 48. matches src/fills
+const DEFAULT_REGION = 'conus';
+
+export const REGION_NAMES = REGIONS.map((entry) => entry.NAME);
+
+const mapNamed = (name) => MAPS.find((map) => map.NAME === name);
+
+// the maps a region is drawn as, e.g. alaska and hawaii are forecast only
+export const mapsFor = (regionName) => REGIONS.find((entry) => entry.NAME === regionName).MAPS;
+
+// whether any map drawn for the region includes a section, so markers that
+// only exist on the radar map are hidden on regions without one
+const regionDraws = (regionName, section) => mapsFor(regionName)
+	.some((name) => mapNamed(name).SECTIONS.includes(section));
+
+export const regionHasMarkers = (regionName) => regionDraws(regionName, 'stations')
+	|| regionDraws(regionName, 'road-icons');
+
+// the editor works in the pixel space of the region's first map, at the size
+// src/drawmap.mjs draws it, which the projection depends on. other maps of the
+// same region are drawn stretched to this size, which is fine as long as they
+// share an aspect ratio
+const worldRegion = (regionName) => {
+	const base = REGIONS.find((entry) => entry.NAME === regionName);
+	return regionForMap(base, mapNamed(base.MAPS[0]));
+};
+
+export const inRegion = (model, item) => {
+	if (item.kind === 'fill') return item.region === model.region.NAME;
+	return regionDraws(model.region.NAME, item.kind === 'station' ? 'stations' : 'road-icons');
+};
+
+export const setRegion = (model, regionName) => {
+	model.region = worldRegion(regionName);
+	model.projection = createProjection(model.region);
+	recomputePositions(model);
+};
 
 const fetchJson = async (url) => {
 	const response = await fetch(url);
@@ -80,6 +117,8 @@ export const buildModel = (stationsFile, iconsFile, fillsFile = []) => {
 			originalLon: value.lon,
 			originalColor: value.color,
 			originalMaps: value.maps ? [...value.maps] : [...MAP_NAMES],
+			// fixed once placed, a point never moves between regions
+			region: value.region ?? DEFAULT_REGION,
 			hadLatLon: true,
 			isNew: false,
 			name: null,
@@ -91,20 +130,13 @@ export const buildModel = (stationsFile, iconsFile, fillsFile = []) => {
 		});
 	});
 
-	// where the rendered map already draws each marker
-	items.forEach((item) => {
-		item.bakedPosition = item.originalLat !== null
-			? projection.forward([item.originalLon, item.originalLat])
-			: null;
-	});
-
 	const model = {
 		items,
 		undoStack: [],
 		dirty: false,
 	};
 
-	recomputePositions(model);
+	setRegion(model, REGION_NAMES[0]);
 	return model;
 };
 
@@ -119,11 +151,16 @@ export const createModel = async () => {
 };
 
 // every marker is placed by its lat/lon, through the region's projection
-export const positionOf = (model, item) => projection.forward([item.lon, item.lat]);
+export const positionOf = (model, item) => model.projection.forward([item.lon, item.lat]);
 
 export const recomputePositions = (model) => {
 	model.items.forEach((item) => {
 		item.position = positionOf(model, item);
+		// where the rendered map already draws it. a fill point added here was
+		// never rendered, so there is no stale position to cover
+		item.bakedPosition = item.originalLat !== null
+			? model.projection.forward([item.originalLon, item.originalLat])
+			: item.position;
 	});
 };
 
@@ -151,6 +188,7 @@ const snapshot = (item) => ({
 	// fill only
 	color: item.color,
 	maps: item.maps ? [...item.maps] : undefined,
+	region: item.region,
 	isNew: item.isNew,
 });
 
@@ -178,7 +216,7 @@ export const mutate = (model, item, changes) => {
 };
 
 export const moveToPixel = (model, item, px, py) => {
-	const [lon, lat] = projection.inverse([px, py]);
+	const [lon, lat] = model.projection.inverse([px, py]);
 	mutate(model, item, { lat: round(lat), lon: round(lon) });
 };
 
@@ -202,9 +240,9 @@ export const revertItem = (model, item) => {
 	});
 };
 
-// add a brand new fill point at a map pixel position
+// add a brand new fill point at a map pixel position, on the current region
 export const addFill = (model, px, py, color, maps) => {
-	const [lon, lat] = projection.inverse([px, py]);
+	const [lon, lat] = model.projection.inverse([px, py]);
 	const existing = model.items.filter((item) => item.kind === 'fill');
 	const order = existing.reduce((highest, item) => Math.max(highest, item.order + 1), 0);
 	const item = {
@@ -216,6 +254,7 @@ export const addFill = (model, px, py, color, maps) => {
 		originalLon: null,
 		originalColor: color,
 		originalMaps: [...maps],
+		region: model.region.NAME,
 		hadLatLon: true,
 		isNew: true,
 		name: null,
@@ -225,8 +264,6 @@ export const addFill = (model, px, py, color, maps) => {
 		maps: [...maps],
 		deleted: false,
 	};
-	// nothing was rendered for it yet, so there is no stale position to cover
-	item.bakedPosition = projection.forward([item.lon, item.lat]);
 	model.items.push(item);
 	model.undoStack.push({ ...snapshot(item), added: true });
 	model.dirty = true;
@@ -298,6 +335,7 @@ export const loadSession = (model) => {
 				originalLon: null,
 				originalColor: state.color,
 				originalMaps: state.maps ? [...state.maps] : [],
+				region: state.region ?? DEFAULT_REGION,
 				hadLatLon: true,
 				isNew: true,
 				name: null,
@@ -306,7 +344,6 @@ export const loadSession = (model) => {
 				color: state.color,
 				maps: state.maps ? [...state.maps] : [],
 				deleted: state.deleted,
-				bakedPosition: projection.forward([state.lon, state.lat]),
 			});
 			return;
 		}
@@ -362,7 +399,7 @@ export const serializeFills = (model) => {
 		.sort((a, b) => a.order - b.order)
 		.map((item) => {
 			const maps = item.maps.map((name) => `"${name}"`).join(', ');
-			return `\t{"lat": ${item.lat}, "lon": ${item.lon}, "color": "${item.color}", "maps": [${maps}]}`;
+			return `\t{"lat": ${item.lat}, "lon": ${item.lon}, "color": "${item.color}", "region": "${item.region}", "maps": [${maps}]}`;
 		});
 	return `[\n${lines.join(',\n')}\n]`;
 };

@@ -8,42 +8,51 @@
 import { readFile } from 'node:fs/promises';
 import realCreateProjection from '../src/createProjection.mjs';
 import REGIONS from '../src/REGIONS.mjs';
+import MAPS from '../src/MAPS.mjs';
+import regionForMap from '../src/regionForMap.mjs';
 import createProjection from './projection.mjs';
-import { buildModel, serializeStations, serializeIcons } from './data.mjs';
-
-const tile = REGIONS[0];
-const real = realCreateProjection(tile);
-const port = createProjection(tile);
+import {
+	buildModel, serializeStations, serializeIcons, serializeFills,
+} from './data.mjs';
 
 let maxForward = 0;
 let maxInverse = 0;
 let maxRoundTrip = 0;
 
-// sweep the whole output image, well past the bounds of the data
-const { width, height } = tile.outputSize;
-for (let px = 0; px <= width; px += 25) {
-	for (let py = 0; py <= height; py += 25) {
-		const realLonLat = real.inverse([px, py]);
-		const portLonLat = port.inverse([px, py]);
-		maxInverse = Math.max(
-			maxInverse,
-			Math.abs(realLonLat[0] - portLonLat[0]),
-			Math.abs(realLonLat[1] - portLonLat[1]),
-		);
+// every size each region is actually drawn at, since a map drawn at its own
+// size changes the projection
+const tiles = REGIONS.flatMap((region) => region.MAPS
+	.map((name) => regionForMap(region, MAPS.find((entry) => entry.NAME === name))));
 
-		const realPixel = real.forward(realLonLat);
-		const portPixel = port.forward(realLonLat);
-		maxForward = Math.max(
-			maxForward,
-			Math.abs(realPixel[0] - portPixel[0]),
-			Math.abs(realPixel[1] - portPixel[1]),
-		);
+tiles.forEach((tile) => {
+	const real = realCreateProjection(tile);
+	const port = createProjection(tile);
+	// sweep the whole output image, well past the bounds of the data
+	const { width, height } = tile.outputSize;
+	for (let px = 0; px <= width; px += 25) {
+		for (let py = 0; py <= height; py += 25) {
+			const realLonLat = real.inverse([px, py]);
+			const portLonLat = port.inverse([px, py]);
+			maxInverse = Math.max(
+				maxInverse,
+				Math.abs(realLonLat[0] - portLonLat[0]),
+				Math.abs(realLonLat[1] - portLonLat[1]),
+			);
 
-		// the editor relies on inverse then forward landing back on the click
-		const back = port.forward(portLonLat);
-		maxRoundTrip = Math.max(maxRoundTrip, Math.abs(back[0] - px), Math.abs(back[1] - py));
+			const realPixel = real.forward(realLonLat);
+			const portPixel = port.forward(realLonLat);
+			maxForward = Math.max(
+				maxForward,
+				Math.abs(realPixel[0] - portPixel[0]),
+				Math.abs(realPixel[1] - portPixel[1]),
+			);
+
+			// the editor relies on inverse then forward landing back on the click
+			const back = port.forward(portLonLat);
+			maxRoundTrip = Math.max(maxRoundTrip, Math.abs(back[0] - px), Math.abs(back[1] - py));
+		}
 	}
-}
+});
 
 const results = [
 	['projection forward (pixels)', maxForward, 1e-6],
@@ -62,10 +71,12 @@ results.forEach(([label, value, tolerance]) => {
 // corrections are the only meaningful lines in the resulting diff
 const stationsText = await readFile('./data/stations.json', 'utf8');
 const iconsText = await readFile('./data/road-icons.json', 'utf8');
-const model = buildModel(JSON.parse(stationsText), JSON.parse(iconsText));
+const fillsText = await readFile('./data/fills.json', 'utf8');
+const model = buildModel(JSON.parse(stationsText), JSON.parse(iconsText), JSON.parse(fillsText));
 
 const stationsExport = serializeStations(model);
 const iconsExport = serializeIcons(model);
+const fillsExport = serializeFills(model);
 
 console.log('');
 
@@ -82,6 +93,7 @@ const checkData = (label, actual, expected) => {
 
 checkData('stations.json data', stationsExport, JSON.parse(stationsText));
 checkData('road-icons.json data', iconsExport, JSON.parse(iconsText));
+checkData('fills.json data', fillsExport, JSON.parse(fillsText));
 
 // formatting matches the repo style. stations.json has one hand-edited,
 // tab-indented entry that the export normalizes to the file's usual 2 space
@@ -100,6 +112,7 @@ const checkFormat = (label, actual, expected, note = '') => {
 
 checkFormat('stations.json format', stationsExport, JSON.stringify(JSON.parse(stationsText), null, 2), ', canonical 2 space');
 checkFormat('road-icons.json format', iconsExport, iconsText, ' identical to disk');
+checkFormat('fills.json format', fillsExport, fillsText, ' identical to disk');
 
 if (failed) {
 	console.error('\neditor does not match the pipeline');

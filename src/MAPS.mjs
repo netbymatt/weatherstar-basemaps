@@ -64,10 +64,6 @@ const MAPS = [
 			'palettize',
 			// 'pixelate',
 		],
-		outputSize: {
-			width: 3400,
-			height: 2133,
-		},
 	},
 ];
 

@@ -596,6 +596,7 @@ try {
 			isNew: sel?.isNew,
 			color: sel?.color,
 			maps: sel?.maps,
+			region: sel?.region,
 			newBadge: !document.getElementById('fill-new').hidden,
 		};
 	})()`);
@@ -603,13 +604,14 @@ try {
 	check('the new point is selected', added.selectedIsFill && added.isNew === true);
 	check('it takes the current color', added.color === 'stateFill', String(added.color));
 	check('it applies to every map by default', (added.maps ?? []).join(',') === 'radar,forecast', (added.maps ?? []).join(','));
+	check('it belongs to the current region', added.region === 'conus', String(added.region));
 	check('pane flags it as new', added.newBadge);
 
 	// the export has to include it, in the road-icons style
 	const fillsExport = await evaluate(cdp, 'window.editor.serializeFills()');
 	const fillLines = fillsExport.trim().split('\n');
 	check('fills export includes the new point', fillLines.length === added.count + 2, `${fillLines.length} lines`);
-	check('fills export uses the repo style', /^\t\{"lat": -?\d+(\.\d+)?, "lon": -?\d+(\.\d+)?, "color": "\w+", "maps": \[.*\]\}/.test(fillLines[1]), fillLines[1]);
+	check('fills export uses the repo style', /^\t\{"lat": -?\d+(\.\d+)?, "lon": -?\d+(\.\d+)?, "color": "\w+", "region": "\w+", "maps": \[.*\]\}/.test(fillLines[1]), fillLines[1]);
 	let fillsParse = false;
 	try {
 		JSON.parse(fillsExport);
@@ -679,7 +681,7 @@ try {
 	})()`);
 	check('color picker updates the point', editProbe.color === 'water', editProbe.color);
 	check('unchecking a map narrows its scope', editProbe.maps.join(',') === 'forecast', editProbe.maps.join(','));
-	check('export carries color and maps', editProbe.exported.includes('"color": "water", "maps": ["forecast"]'));
+	check('export carries color and maps', editProbe.exported.includes('"color": "water", "region": "conus", "maps": ["forecast"]'));
 
 	// undo removes the point entirely
 	await cdp.send('Input.dispatchKeyEvent', {
@@ -714,6 +716,72 @@ try {
 	})()`);
 	check('markers mode ignores fill crosshairs', backToMarkers.hit !== 'fill', String(backToMarkers.hit));
 	check('markers mode hides the fill pane', backToMarkers.fillPaneHidden);
+
+	/* ---------- other regions ---------- */
+
+	const conusFills = await evaluate(cdp, "window.editor.model.items.filter((i) => i.kind === 'fill' && i.region === 'conus').length");
+	const alaska = await evaluate(cdp, `(async () => {
+		await window.editor.setRegion('alaska');
+		const markersButton = document.querySelector('#mode-switch [data-mode="markers"]');
+		// a conus fill and a station, projected into alaska's pixel space
+		const conusFill = window.editor.model.items.find((i) => i.kind === 'fill' && i.region === 'conus');
+		const station = window.editor.model.items.find((i) => i.kind === 'station');
+		const [fx, fy] = window.editor.toScreen(...conusFill.position);
+		const [sx, sy] = window.editor.toScreen(...station.position);
+		return {
+			mode: window.editor.ui.mode,
+			markersDisabled: markersButton.disabled,
+			generatedMaps: [...document.querySelectorAll('#generated-map option')].map((o) => o.value),
+			mapBoxes: [...document.querySelectorAll('#fill-maps input')].map((i) => i.value),
+			size: window.editor.model.region.outputSize,
+			conusFillHit: window.editor.itemAt(fx, fy)?.kind ?? null,
+			stationHit: window.editor.itemAt(sx, sy)?.kind ?? null,
+			fillCount: document.getElementById('stat-fills').textContent,
+		};
+	})()`);
+	check('alaska switches to fill mode', alaska.mode === 'fill', alaska.mode);
+	check('alaska disables markers mode', alaska.markersDisabled);
+	check('alaska only offers the forecast map', alaska.generatedMaps.join(',') === 'forecast', alaska.generatedMaps.join(','));
+	check('alaska fill checkboxes are forecast only', alaska.mapBoxes.join(',') === 'forecast', alaska.mapBoxes.join(','));
+	check('alaska uses its own output size', alaska.size.width === 3456 && alaska.size.height === 4276, `${alaska.size.width}x${alaska.size.height}`);
+	check('conus fill points are not selectable in alaska', alaska.conusFillHit === null, String(alaska.conusFillHit));
+	check('stations are not selectable in alaska', alaska.stationHit === null, String(alaska.stationHit));
+	check('fill count is per region', alaska.fillCount === '0', alaska.fillCount);
+
+	// add a point on the kenai peninsula
+	const akProbe = await evaluate(cdp, `(() => {
+		const [px, py] = window.editor.toScreen(...window.editor.projection.forward([-150.5, 60.3]));
+		const rect = document.getElementById('canvas').getBoundingClientRect();
+		return { x: rect.left + px, y: rect.top + py };
+	})()`);
+	await clickAt(cdp, akProbe.x, akProbe.y);
+	const akAdded = await evaluate(cdp, `(() => {
+		const sel = window.editor.selected;
+		const line = window.editor.serializeFills().split('\\n').find((l) => l.includes('"alaska"'));
+		return {
+			region: sel?.region, maps: sel?.maps, lat: sel?.lat, lon: sel?.lon, line,
+		};
+	})()`);
+	check('alaska point is tagged alaska', akAdded.region === 'alaska', String(akAdded.region));
+	check('alaska point applies to forecast only', (akAdded.maps ?? []).join(',') === 'forecast', (akAdded.maps ?? []).join(','));
+	check('alaska point lands where clicked', Math.abs(akAdded.lat - 60.3) < 0.05 && Math.abs(akAdded.lon + 150.5) < 0.05, `${akAdded.lat}, ${akAdded.lon}`);
+	check('alaska point is exported with its region', Boolean(akAdded.line), String(akAdded.line));
+
+	const backToConus = await evaluate(cdp, `(async () => {
+		await window.editor.setRegion('conus');
+		return {
+			markersDisabled: document.querySelector('#mode-switch [data-mode="markers"]').disabled,
+			generatedMaps: [...document.querySelectorAll('#generated-map option')].map((o) => o.value),
+			fillCount: document.getElementById('stat-fills').textContent,
+		};
+	})()`);
+	check('conus re-enables markers mode', !backToConus.markersDisabled);
+	check('conus offers radar and forecast', backToConus.generatedMaps.join(',') === 'radar,forecast', backToConus.generatedMaps.join(','));
+	check('conus fill count excludes alaska', backToConus.fillCount === String(conusFills), `${backToConus.fillCount} vs ${conusFills}`);
+
+	// drop the alaska point so repeat runs start fresh
+	await evaluate(cdp, "localStorage.removeItem('basic-map-editor-edits-v1')");
+	await reload(cdp);
 
 	// zoom shortcuts
 	await pressKey('1', 'Digit1', 49);

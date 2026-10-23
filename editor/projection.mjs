@@ -10,6 +10,11 @@ const A = 6378137.0;
 const F = 1 / 298.257223563;
 const E = Math.sqrt(2 * F - F * F);
 
+// proj4's adjust_lon: fold a longitude (radians) back into -pi..pi. the
+// alaska view runs past the antimeridian, where this decides which side a
+// longitude comes out on
+const adjustLon = (x) => (Math.abs(x) <= Math.PI ? x : x - Math.sign(x) * 2 * Math.PI);
+
 // ellipsoidal mercator, equivalent to +proj=merc +lon_0=lon0 +datum=WGS84 +units=m
 const mercator = (lon0) => {
 	const lambda0 = (lon0 * Math.PI) / 180;
@@ -20,13 +25,13 @@ const mercator = (lon0) => {
 		const sinPhi = Math.sin(phi);
 		const con = ((1 - E * sinPhi) / (1 + E * sinPhi)) ** (E / 2);
 		return [
-			A * (lambda - lambda0),
+			A * adjustLon(lambda - lambda0),
 			A * Math.log(Math.tan(Math.PI / 4 + phi / 2) * con),
 		];
 	};
 
 	const inverse = ([x, y]) => {
-		const lambda = x / A + lambda0;
+		const lambda = adjustLon(x / A + lambda0);
 		const t = Math.exp(-y / A);
 		// iterate the latitude out of the isometric latitude
 		let phi = Math.PI / 2 - 2 * Math.atan(t);

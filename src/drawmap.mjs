@@ -13,6 +13,7 @@ import plotFromShape from './plotfromshape/index.mjs';
 import writePngToFile, { writeWebpToFile } from './utils/file.mjs';
 import sliceToTiles from './utils/tiles.mjs';
 import createProjection from './createProjection.mjs';
+import regionForMap from './regionForMap.mjs';
 import addStations from './stations/index.mjs';
 import addRoadIcons from './roadicons/index.mjs';
 import addFills from './fills/index.mjs';
@@ -151,10 +152,10 @@ const drawSections = async (ctx, region, map, scale, tag, writeStage) => {
 };
 
 const drawMap = async (baseRegion, map) => {
-	// presence of map output size overrides region output size. build a new
-	// region rather than editing the shared one, maps for the same region are
-	// drawn in parallel and each needs its own size
-	const region = map.outputSize ? { ...baseRegion, outputSize: map.outputSize } : baseRegion;
+	// a region can draw some maps at their own size. this builds a new region
+	// rather than editing the shared one, maps for the same region are drawn
+	// in parallel and each needs its own size
+	const region = regionForMap(baseRegion, map);
 	const { outputSize } = region;
 	const { COLORS } = map;
 	const tag = `${map.NAME}-${region.NAME}`;
